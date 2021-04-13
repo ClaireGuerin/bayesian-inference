@@ -22,10 +22,12 @@ class PDF(object):
 	#print(log_pdf_exp(pandas_bm,0.1))
 
 	def log_pdf_uniform(x, a, b):
-		data = np.array(x)
-		in_range = a < data < b
-		data[not in_range] = - np.inf
-		data[in_range] = -np.log(b - a)
+		data = np.array(x, dtype=np.float64)
+		upper = data < b
+		lower = a < data
+		data[not upper] = - np.inf
+		data[not lower] = - np.inf
+		data[upper and lower] = -np.log(b - a)
 
 		return data
 
@@ -48,3 +50,5 @@ class PDF(object):
 		return p
 
 	#print(log_pdf_gamma(pandas_bm,2,0.1))
+
+#print(PDF.log_pdf_uniform(20, 10, 100))
