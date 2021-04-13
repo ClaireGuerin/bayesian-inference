@@ -113,3 +113,30 @@ for i in range(n_steps):
 
 fig = go.Figure(data=[go.Surface(x=mean_array, y=std_array, z=z_2dPrior.T)])
 fig.show()
+
+n_steps = 100
+alpha_array = np.linspace(20,80,n_steps)
+betas_array = np.linspace(0.2,1,n_steps)
+
+# Calculate prior likelihood
+# create an empty 2D array
+z_2dLogLik = np.zeros((n_steps,n_steps))
+z_2dGamma  = np.zeros((n_steps,n_steps))
+
+# loop through the indices
+for i in range(n_steps):
+    for j in range(n_steps):
+        alphas = alpha_array[i]
+        betas = betas_array[j]
+        likelihood = np.sum(log_pdf_gamma(pandas_bm, alphas, betas))
+        prior_alpha = log_pdf_uniform(alphas,0,100)
+        prior_beta = log_pdf_uniform(betas,0,100)
+        posterior = likelihood + prior_alpha + prior_beta
+        z_2dGamma[i,j] = posterior
+        z_2dLogLik[i,j] = likelihood
+
+fig = go.Figure(data=[go.Surface(x=alpha_array, y=betas_array, z=np.exp(z_2dGamma.T))])
+fig.show()
+
+fig = go.Figure(data=[go.Surface(x=alpha_array, y=betas_array, z=z_2dLogLik.T)])
+fig.show()
