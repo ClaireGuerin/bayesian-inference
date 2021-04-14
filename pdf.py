@@ -35,6 +35,7 @@ class PDF(object):
 
 	def log_pdf_normal(x, mu, sigma):
 		x = np.array(x)
+		#mu = np.array(mu)
 		to_square = x - mu
 		sigma_square = 2 * sigma * sigma
 		p = - 0.5 * np.log(np.pi * sigma_square) - (to_square * to_square) / sigma_square
