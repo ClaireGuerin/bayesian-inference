@@ -1,6 +1,5 @@
 from pdf import PDF as pdf
-from data import pandas_bm
-from data import climate
+from data import pandas_bm, bears_bm, climate
 import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt
@@ -143,7 +142,7 @@ class MCMC(object):
 				#print("likelihood = {0}".format(likelihood))
 
 				# 4: calculate the posterior
-				new_posterior_ratio = new_likelihood + new_prior_mu0 + new_prior_sigma0 + new_prior_slope -(current_likelihood + current_prior_mu0 + current_prior_sigma0 + current_prior_slope)
+				new_posterior_ratio = new_likelihood + new_prior_mu0 + new_prior_sigma0 + new_prior_slope - (current_likelihood + current_prior_mu0 + current_prior_sigma0 + current_prior_slope)
 
 				#print("posterior = {0}".format(posterior_ratio))
 
@@ -158,8 +157,8 @@ class MCMC(object):
 				## If rejected -> current_mu = current_mu
 				if random_number <= acceptance_probability:
 					print("accepted")
-					current_mu = new_mu0
-					current_sigma = new_sigma0
+					current_mu0 = new_mu0
+					current_sigma0 = new_sigma0
 					current_slope = new_slope
 					current_likelihood = new_likelihood
 					current_prior_mu0 = new_prior_mu0
@@ -170,3 +169,95 @@ class MCMC(object):
 					print("rejected")
 				f.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\n".format(iteration, current_posterior_ratio, current_likelihood, current_prior_mu0 + current_prior_sigma0, current_mu0, current_sigma0, current_slope))
 				print("writing output...")
+
+	def normal_pandas_bears(self, initial_mu_panda_value, initial_sigma_panda_value, initial_mu_bear_value, initial_sigma_bear_value, initial_alpha_value, initial_beta_value, nIterations, winsize_mu, winsize_sigma, winsize_alpha, a_mu, b_mu):
+		with open(self.outputfile, "w") as f:
+
+			f.write("iter\t posterior\t likelihood\t prior\t mu_pandas\t sigma_pandas \t mu_bears \t sigma_bears \t alpha \t beta \t mu_diff\n")
+			current_mu_pandas = initial_mu_panda_value
+			current_sigma_pandas = initial_sigma_panda_value
+			current_mu_bears = initial_mu_bear_value
+			current_sigma_bears = initial_sigma_bear_value
+			current_alpha = initial_alpha_value
+			current_beta = initial_beta_value
+
+			#priors
+			current_prior_mu_pandas = pdf.log_pdf_uniform(current_mu_pandas, a_mu, b_mu)
+			current_prior_sigma_pandas = pdf.log_pdf_gamma(current_sigma_pandas, current_alpha, current_beta)
+			current_prior_mu_bears = pdf.log_pdf_uniform(current_mu_bears, a_mu, b_mu)
+			current_prior_sigma_bears = pdf.log_pdf_gamma(current_sigma_bears, current_alpha, current_beta)
+			current_prior_alpha = pdf.log_pdf_exp(current_alpha, 0.1)
+			current_prior_beta = pdf.log_pdf_exp(current_beta, 0.1)
+			current_prior = current_prior_mu_pandas + current_prior_sigma_pandas + current_prior_mu_bears + current_prior_sigma_bears + current_prior_alpha + current_prior_beta
+
+			#likelihood and posterior
+			current_likelihood_pandas = np.sum(pdf.log_pdf_normal(pandas_bm, current_mu_pandas, current_sigma_pandas))
+			current_likelihood_bears = np.sum(pdf.log_pdf_normal(bears_bm, current_mu_bears, current_sigma_bears))
+			current_likelihood = current_likelihood_bears + current_likelihood_pandas
+			current_posterior_ratio = 1
+
+			for iteration in range(nIterations):
+				print('iteration number {0}'.format(iteration))
+
+				# 1: propose new values for our parameters
+				## in this example we are pretending there is no hastings ratio put out by our function 
+				new_mu_pandas, log_h_ratio_mu_pandas = self.sliding_window(current_mu_pandas, winsize_mu)
+				new_sigma_pandas, log_h_ratio_sigma_pandas = self.sliding_window(current_sigma_pandas, winsize_sigma)
+				new_mu_bears, log_h_ratio_mu_bears = self.sliding_window(current_mu_bears, winsize_mu)
+				new_sigma_bears, log_h_ratio_sigma_bears = self.sliding_window(current_sigma_bears, winsize_sigma)
+				new_alpha, log_h_ratio_alpha = self.sliding_window(current_alpha, winsize_alpha)
+				new_beta, log_h_ratio_alphaa = self.sliding_window(current_beta, winsize_alpha)
+
+				## Make sure the new value is positive
+				new_mu_pandas = abs(new_mu_pandas)
+				new_sigma_pandas = abs(new_sigma_pandas)
+				new_mu_bears = abs(new_mu_bears)
+				new_sigma_bears = abs(new_sigma_bears)
+				new_alpha = abs(new_alpha)
+				new_beta = abs(new_beta)
+
+				# 2: calculate the prior probability of these parameter values
+				new_prior_mu_pandas = pdf.log_pdf_uniform(new_mu_pandas, a_mu, b_mu)
+				new_prior_sigma_pandas = pdf.log_pdf_gamma(new_sigma_pandas, new_alpha, new_beta)
+				new_prior_mu_bears = pdf.log_pdf_uniform(new_mu_bears, a_mu, b_mu)
+				new_prior_sigma_bears = pdf.log_pdf_gamma(new_sigma_bears, new_alpha, new_beta)
+				new_prior_alpha = pdf.log_pdf_exp(new_alpha, 0.1)
+				new_prior_beta = pdf.log_pdf_exp(new_beta, 0.1)
+				new_prior = new_prior_mu_pandas + new_prior_sigma_pandas + new_prior_mu_bears + new_prior_sigma_bears + new_prior_alpha + new_prior_beta
+
+				# 3: calculate the likelihood of the data with these parameter value
+				new_likelihood_pandas = np.sum(pdf.log_pdf_normal(pandas_bm, new_mu_pandas, new_sigma_pandas))
+				new_likelihood_bears = np.sum(pdf.log_pdf_normal(bears_bm, new_mu_bears, new_sigma_bears))
+				new_likelihood = new_likelihood_pandas + new_likelihood_bears
+
+				# 4: calculate the posterior
+				new_posterior_ratio = new_likelihood + new_prior - (current_likelihood + current_prior)
+
+				#print("posterior = {0}".format(posterior_ratio))
+
+				# 5: compare new posterior with previous one and decide if we accept the new parameter values or not
+				## we use our posterior ratio as our acceptance probability
+				acceptance_probability = np.exp(new_posterior_ratio)
+				## draw a random number from a uniform distribution between 0 and 1
+				random_number = np.random.uniform(0,1)
+				print(random_number <= acceptance_probability)
+				## if smaller or equal to our acceptance probability -> accept. Otherwise -> reject
+				## If accepted -> current_mu = new_mu
+				## If rejected -> current_mu = current_mu
+				if random_number <= acceptance_probability:
+					print("accepted")
+					current_mu_pandas = new_mu_pandas
+					current_sigma_pandas = new_sigma_pandas
+					current_mu_bears = new_mu_bears
+					current_sigma_bears = new_sigma_bears
+					current_alpha = new_alpha
+					current_beta = new_beta
+					current_likelihood = new_likelihood
+					current_prior = new_prior
+					current_posterior_ratio = new_posterior_ratio
+				else:
+					print("rejected")
+				f.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}\t{8}\t{9}\t{10}\n".format(iteration, current_posterior_ratio, current_likelihood, current_prior, current_mu_pandas, current_sigma_pandas, current_mu_bears, current_sigma_bears, current_alpha, current_beta, current_mu_pandas-current_mu_bears))
+				print("writing output...")
+				#"iter\t posterior\t likelihood\t prior\t mu_pandas\t sigma_pandas \t mu_bears \t sigma_bears \t alpha \t beta \t mu_diff\n"
+
